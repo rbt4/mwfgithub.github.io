@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" id="themeColor" content="#eef2f6">
+<meta name="application-name" content="Deskline">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Clock</title>
+<meta name="description" content="A quiet offline workday clock with private schedule, pace and timer cues.">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<link id="favicon" rel="icon" type="image/png" href="./icons/icon-32.png">
+<style>html,body{width:100%;height:100%;margin:0}body{display:grid;place-items:center;overflow:hidden;background:linear-gradient(155deg,#f8fafc,#e7ecf2);color:#1d2732;font-family:"Segoe UI",system-ui,sans-serif}.grain,.edge-cue,.status-area,.product-mark,.signal-aura,.corner,.panel,.toast{display:none}.time-row{display:flex;align-items:flex-start}.time-main{font-size:clamp(5rem,14vw,11rem);font-weight:280;letter-spacing:-.06em;line-height:.85}.clock-side{margin-left:1rem;padding-top:1rem;color:#66717c}.seconds,.ampm{font-size:1rem}.date{margin-top:1.5rem;text-align:center;color:#66717c;letter-spacing:.2em;text-transform:uppercase;font-size:.75rem}.clock-shell{text-align:center}</style>
+</head>
+<body data-theme="desk" data-signal="none" data-clarity="discreet" data-edge="on" data-seconds="on">
+<div class="grain" aria-hidden="true"></div>
+<div class="edge-cue" aria-hidden="true"></div>
+<main>
+  <section class="clock-shell" aria-label="Deskline workday clock">
+    <div class="product-mark"><span></span>Deskline<span></span></div>
+    <div class="signal-aura" aria-hidden="true"></div>
+    <div class="time-row">
+      <div class="time-main"><span id="hour">--</span><span class="colon">:</span><span id="minute">--</span></div>
+      <div class="clock-side"><div class="seconds" id="seconds">--</div><div class="ampm" id="ampm">--</div></div>
+    </div>
+    <div class="date" id="date"></div>
+    <div class="status-area">
+      <button class="status-line" id="statusLine" type="button" title="Click to reveal; during a cue, click to acknowledge. Shift-click to snooze.">
+        <span class="status-word" id="statusWord">Next</span><span class="status-sep"></span>
+        <span id="eventTime">--:--</span><span class="status-sep"></span><span id="relativeTime">--</span>
+        <span class="event-name" id="eventName"></span>
+      </button>
+      <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="sequence" id="sequence" aria-label="Daily prayer sequence"></div>
+      <div class="workline" id="workline" aria-label="Workday rituals">
+        <button class="ritual water" id="waterBtn" type="button" aria-label="Log a sip break">
+          <span class="water-meter" id="waterMeter" aria-hidden="true"></span><span class="ritual-copy" id="waterText">Sip pace</span>
+        </button>
+        <span class="ritual-divider" aria-hidden="true"></span>
+        <button class="ritual noodle" id="noodleBtn" type="button" aria-label="Start noodle timer">
+          <span class="timer-ring" id="noodleRing" aria-hidden="true"><span class="timer-core"></span></span><span class="ritual-copy" id="noodleText">Start 30m</span>
+        </button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast" role="status"></div>
+<div class="panel" id="panel" role="dialog" aria-label="Clock settings"></div>
+<button class="corner" id="corner" type="button" aria-label="Open settings"></button>
+
+<script src="./loader.js" defer></script>
+</body>
+</html>

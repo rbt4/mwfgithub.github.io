@@ -1,0 +1,56 @@
+    const pace=(prefs.waterSips*plan.amount).toFixed(plan.amount%1?1:0);toast(prefs.waterSips>=plan.total?`Hydration pace met · ${prefs.waterTarget} oz target`:`Sip break ${prefs.waterSips} of ${plan.total} · ${pace} oz pace`);render();
+  }
+  function startNoodles(){prefs.noodleStart=Date.now();prefs.noodleDurationAtStart=prefs.noodleMinutes;prefs.noodleDone='';testRoutine='none';save();toast(`${prefs.noodleMinutes}-minute noodle timer started`);render();}
+  function cancelNoodles(){prefs.noodleStart=0;prefs.noodleDurationAtStart=0;testRoutine='none';save();toast('Noodle timer cancelled');render();}
+  function finishNoodles(){prefs.noodleStart=0;prefs.noodleDurationAtStart=0;prefs.noodleDone=dayKey(new Date());testRoutine='none';save();toast('Collected · lunch ready');render();}
+  function cycleNoodleDuration(){prefs.noodleMinutes={30:45,45:60,60:30}[prefs.noodleMinutes]||30;save();toast(`Noodle timer set to ${prefs.noodleMinutes} min`);render();}
+  function noodleAction(shift=false){
+    if(testRoutine==='noodle'){clearSignalTest();toast('Timer signal check cleared · nothing changed');return;}
+    const {noodle}=currentStates();if(shift){if(noodle.running||noodle.ready)cancelNoodles();else cycleNoodleDuration();return;}if(noodle.ready){finishNoodles();return;}if(noodle.running){revealFor();toast(`${mmss(noodle.remain)} remaining`);return;}if(noodle.state==='done'){toast('Lunch already complete · Shift-click to choose a new timer');return;}startNoodles();
+  }
+  function primaryAcknowledge(){const {attention,noodle}=currentStates();if(attention.source==='noodle'&&noodle.ready){finishNoodles();return true;}return acknowledgePrayer();}
+  function smartSnooze(){const {attention,noodle}=currentStates();if(attention.source==='noodle'&&noodle.ready){const total=prefs.noodleDurationAtStart||prefs.noodleMinutes;prefs.noodleStart=Date.now()-(total-5)*60000;save();toast('Noodles · 5 more minutes');render();return true;}if(attention.source==='water'){prefs.waterGraceUntil=Date.now()+10*60000;save();toast('Sip reminder paused for 10 min');render();return true;}return snoozePrayer();}
+
+  $('statusLine').addEventListener('click',e=>{e.stopPropagation();if(e.shiftKey){if(!smartSnooze())revealFor();}else if(!primaryAcknowledge())revealFor();});
+  $('waterBtn').addEventListener('click',e=>{e.stopPropagation();logWater(e.shiftKey?-1:1);});
+  $('waterBtn').addEventListener('contextmenu',e=>{e.preventDefault();e.stopPropagation();logWater(-1);});
+  $('noodleBtn').addEventListener('click',e=>{e.stopPropagation();noodleAction(e.shiftKey);});
+  $('noodleBtn').addEventListener('contextmenu',e=>{e.preventDefault();e.stopPropagation();noodleAction(true);});
+
+  function setting(label,action,value){return `<div class="setting"><span class="setting-label">${label}</span><button class="setting-value" data-action="${action}" type="button">${value}</button></div>`;}
+  function choices(label,action,options,current){return `<div class="choice-setting"><span class="setting-label">${label}</span><span class="choice-group">${options.map(([value,text])=>`<button class="choice${String(value)===String(current)?' active':''}" data-action="${action}" data-value="${value}" type="button">${text}</button>`).join('')}</span></div>`;}
+  function buildPanel(h,prayer,water,noodle){
+    const current=['due','pending','snoozed'].includes(prayer.signal)?prayer.event:prayer.next[0];
+    const rows=PRAYERS.map(([k,label])=>{const offset=prefs.offsets[k]||0,control=ALERTS.includes(k)?`<span class="offset-control"><button class="mini" data-offset="${k}" data-delta="-1" type="button">−</button><span class="offset">${offset>0?'+':''}${offset}m</span><button class="mini" data-offset="${k}" data-delta="1" type="button">+</button></span>`:'<span></span>';return `<span class="k ${k===current?'hot':''}">${label}</span><span class="v ${k===current?'hot':''}">${fmt(times[k])}</span>${control}`;}).join('');
+    const qdir=['N','NE','E','SE','S','SW','W','NW'][Math.round(QIBLA/45)%8],notificationStatus=!('Notification'in window)?'Unavailable':prefs.browserNotif?'On':'Off';
+    $('panel').innerHTML=`
+      <div class="panel-head"><div><div class="panel-title">Deskline</div><div class="panel-sub">Quiet workday PWA · Toronto · private by design</div></div><button class="close" data-action="close" type="button">×</button></div>
+      <div class="section-title">Today · calibration</div><div class="prayer-grid">${rows}</div>
+      <div class="section-title">Display</div>
+      ${choices('Theme','themeSet',[['auto','Auto'],['desk','Desk'],['paper','Paper'],['dark','Dark']],prefs.theme)}
+      ${setting('Time format','format',prefs.timeFormat==='12'?'12-hour':'24-hour')}
+      ${setting('Seconds','seconds',prefs.showSeconds?'Shown':'Hidden')}
+      ${setting('Default detail','privacy',prefs.privacy?'Coded':'Named')}
+      ${setting('Quick cover','cover',document.body.classList.contains('cover')?'On':'Off')}
+      <div class="section-title">Silent cue</div>
+      ${setting('Cue strength','clarity',prefs.clarity==='discreet'?'Discreet':'Clear')}
+      ${setting('Top-edge cue','edge',prefs.edgeCue?'On':'Off')}
+      ${setting('Prayer early cue','lead',`${prefs.lead} min`)}
+      ${setting('Prayer active window','dueWindow',`${prefs.dueWindow} min`)}
+      ${setting('Prayer snooze','snooze',`${prefs.snoozeMinutes} min`)}
+      ${setting('System notification','notify',notificationStatus)}
+      ${setting('Notification text','notifyDetail',prefs.notificationDetail==='generic'?'Generic':'Named')}
+      <div class="section-title">Prayer schedule</div>
+      ${setting('Asr method','asr',prefs.asr==='hanafi'?'Hanafi':'Standard')}
+      ${setting('Calculation','method',prefs.method==='18'?'18°':'ISNA 15°')}
+      <div class="section-title">App & taskbar</div>
+      <div class="app-status"><span class="k">Installation</span><span class="v ${isStandalone()?'good':''}">${isStandalone()?'Installed app':deferredInstallPrompt?'Ready to install':'Open in Edge'}</span><span class="k">Offline engine</span><span class="v ${serviceWorkerState.includes('ready')||serviceWorkerState==='Updated'?'good':serviceWorkerState.includes('failed')?'warn':''}">${serviceWorkerState}</span><span class="k">Taskbar code</span><span class="v">${'setAppBadge'in navigator?'1 schedule · 2 pace · 3 timer':'Install in Edge to enable'}</span></div>
+      ${setting('Taskbar badge','taskbarBadge',prefs.taskbarBadge?'On':'Off')}
+      <div class="actions"><button class="action wide" data-action="installApp" type="button">${isStandalone()?'Deskline is installed':'Install / pin Deskline'}</button></div>
+      <div class="section-title">Workday rhythm</div>
+      ${setting('Workday system','work',prefs.workReminders?'On':'Off')}
+      ${setting('Workdays','workdays',prefs.workdaysOnly?'Monday–Friday':'Every day')}
+      ${setting('Quiet status rail','workline',prefs.showWorkline?'Shown':'Hidden')}
+      ${setting('Work hours','workHours',`${displayClock(workRange().start)}–${displayClock(workRange().end)}`)}
+      ${setting('Hydration target','waterTarget',`${prefs.waterTarget} oz`)}
+      ${choices('Sip cadence','sipCadence',[[20,'20m'],[30,'30m'],[40,'40m']],prefs.sipCadence)}

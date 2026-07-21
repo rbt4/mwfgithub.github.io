@@ -1,0 +1,63 @@
+  function sunPos(jd){const D=jd-2451545,g=fixA(357.529+.98560028*D),q=fixA(280.459+.98564736*D),L=fixA(q+1.915*dsin(g)+.020*dsin(2*g)),e=23.439-.00000036*D,RA=datan2(dcos(e)*dsin(L),dcos(L))/15,eqt=q/15-fixH(RA),decl=dasin(dsin(e)*dsin(L));return{decl,eqt};}
+  function computeTimes(date){
+    const tz=-date.getTimezoneOffset()/60,jd=julian(date.getFullYear(),date.getMonth()+1,date.getDate())-LNG/(15*24),mid=t=>fixH(12-sunPos(jd+t).eqt);
+    const ang=(a,t,dir)=>{const decl=sunPos(jd+t).decl,noon=mid(t),x=(-dsin(a)-dsin(decl)*dsin(LAT))/(dcos(decl)*dcos(LAT)),T=(1/15)*dacos(Math.min(1,Math.max(-1,x)));return noon+(dir==='ccw'?-T:T);};
+    const asr=(factor,t)=>{const decl=sunPos(jd+t).decl,a=-dacot(factor+dtan(Math.abs(LAT-decl)));return ang(a,t,'cw');};
+    const angle=prefs.method==='18'?18:15,asrFactor=prefs.asr==='hanafi'?2:1;
+    let T={fajr:5,sunrise:6,dhuhr:12,asr:13,sunset:18,maghrib:18,isha:19};
+    for(let i=0;i<4;i++){const p={};Object.keys(T).forEach(k=>p[k]=T[k]/24);T.fajr=ang(angle,p.fajr,'ccw');T.sunrise=ang(.833,p.sunrise,'ccw');T.dhuhr=mid(p.dhuhr);T.asr=asr(asrFactor,p.asr);T.sunset=ang(.833,p.sunset,'cw');T.maghrib=ang(.833,p.maghrib,'cw');T.isha=ang(angle,p.isha,'cw');}
+    const adjustment=tz-LNG/15;Object.keys(T).forEach(k=>T[k]+=adjustment);T.dhuhr+=1/60;ALERTS.forEach(k=>T[k]+=(prefs.offsets[k]||0)/60);return T;
+  }
+  function gregJDN(y,m,d){const a=Math.floor((14-m)/12),y2=y+4800-a,m2=m+12*a-3;return d+Math.floor((153*m2+2)/5)+365*y2+Math.floor(y2/4)-Math.floor(y2/100)+Math.floor(y2/400)-32045;}
+  function hijri(dt){let jd=gregJDN(dt.getFullYear(),dt.getMonth()+1,dt.getDate()),l=jd-1948440+10632,n=Math.floor((l-1)/10631);l=l-10631*n+354;let j=Math.floor((10985-l)/5316)*Math.floor((50*l)/17719)+Math.floor(l/5670)*Math.floor((43*l)/15238);l=l-Math.floor((30-j)/15)*Math.floor((17719*j)/50)-Math.floor(j/16)*Math.floor((15238*j)/43)+29;const m=Math.floor((24*l)/709),d=l-Math.floor((709*m)/24),y=30*n+j-30,names=['Muharram','Safar','Rabi I','Rabi II','Jumada I','Jumada II','Rajab','Sha\u02bban','Ramadan','Shawwal','Dhul-Qa\u02bda','Dhul-Hijja'];return `${d} ${names[m-1]} ${y}`;}
+  const QIBLA=(()=>{const kaabaLat=21.4225,kaabaLng=39.8262,dl=dtr(kaabaLng-LNG),b=rtd(Math.atan2(Math.sin(dl)*Math.cos(dtr(kaabaLat)),Math.cos(dtr(LAT))*Math.sin(dtr(kaabaLat))-Math.sin(dtr(LAT))*Math.cos(dtr(kaabaLat))*Math.cos(dl)));return(b+360)%360;})();
+
+  const eventKey=(d,k)=>`${dayKey(d)}:${k}`;
+  const nameOf=k=>(PRAYERS.find(p=>p[0]===k)||[])[1]||'';
+  const fmt=h=>{h=fixH(h);let m=Math.round((h%1)*60),H=Math.floor(h);if(m===60){m=0;H=(H+1)%24;}if(prefs.timeFormat==='24')return `${String(H).padStart(2,'0')}:${String(m).padStart(2,'0')}`;return `${H%12||12}:${String(m).padStart(2,'0')} ${H>=12?'PM':'AM'}`;};
+  const duration=mins=>{mins=Math.max(0,Math.floor(mins));const h=Math.floor(mins/60),m=mins%60;return h?`${h}h ${String(m).padStart(2,'0')}m`:`${m}m`;};
+  const mmss=ms=>{const s=Math.max(0,Math.ceil(ms/1000));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;};
+
+  let times=computeTimes(new Date()),calculatedDay=dayKey(new Date());
+  let panelOpen=false,revealTimer=0,toastTimer=0,testTimer=0,lastRenderedMinute=-1,testPrayer='none',testRoutine='none';
+  const sent=new Set();
+  let deferredInstallPrompt=null,serviceWorkerState=location.protocol==='file:'?'Local file':'Starting',updateAvailable=false,lastBadge='';
+  const isStandalone=()=>window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
+  function badgeCode(attention){return attention&&attention.signal!=='none'?({prayer:1,water:2,noodle:3}[attention.source]||0):0;}
+  function updateAppBadge(attention){
+    const code=prefs.taskbarBadge?badgeCode(attention):0,key=String(code);if(key===lastBadge)return;lastBadge=key;
+    try{if(code&&'setAppBadge'in navigator)Promise.resolve(navigator.setAppBadge(code)).catch(e=>reportError(e,'badge'));else if('clearAppBadge'in navigator)Promise.resolve(navigator.clearAppBadge()).catch(e=>reportError(e,'badge-clear'));}catch(error){reportError(error,'badge');}
+  }
+  window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();deferredInstallPrompt=event;if(panelOpen){const st=currentStates();buildPanel(st.h,st.prayer,st.water,st.noodle);}});
+  window.addEventListener('appinstalled',()=>{deferredInstallPrompt=null;toast('Deskline installed');});
+  async function installDeskline(){
+    if(isStandalone()){toast('Deskline is already installed');return;}
+    if(deferredInstallPrompt){try{deferredInstallPrompt.prompt();await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;}catch(error){reportError(error,'install');toast('Install could not be opened');}return;}
+    toast('In Edge: menu · Apps · Install Deskline');
+  }
+  async function registerDesklineWorker(){
+    if(!('serviceWorker'in navigator)||location.protocol==='file:'){serviceWorkerState=location.protocol==='file:'?'Local file · PWA features off':'Unsupported';return;}
+    try{
+      const registration=await navigator.serviceWorker.register('./service-worker.js');serviceWorkerState='Offline ready';
+      if(registration.waiting){updateAvailable=true;serviceWorkerState='Update ready';}
+      registration.addEventListener('updatefound',()=>{const worker=registration.installing;if(!worker)return;worker.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller){updateAvailable=true;serviceWorkerState='Update ready';toast('Deskline update ready · reopen to apply');}});});
+      let refreshing=false;
+      navigator.serviceWorker.addEventListener('controllerchange',()=>{serviceWorkerState='Updated';if(updateAvailable&&!refreshing){refreshing=true;location.reload();}});
+    }catch(error){serviceWorkerState='Offline setup failed';reportError(error,'service-worker');}
+  }
+  let continuingSession=false;
+  try{continuingSession=sessionStorage.getItem('desklineSessionV8')==='active';sessionStorage.setItem('desklineSessionV8','active');}catch(_){ }
+  if(!continuingSession){const opened=new Date(),openedH=opened.getHours()+opened.getMinutes()/60+opened.getSeconds()/3600;ALERTS.forEach(k=>{if(times[k]<=openedH)prefs.acknowledged[eventKey(opened,k)]=Date.now();});save();}
+
+  function bounds(h){
+    const list=ALERTS.map(k=>[k,times[k]]);let next=list.find(([,t])=>t>h)||null,prev=[...list].reverse().find(([,t])=>t<=h)||null;
+    if(!next){const tomorrow=computeTimes(new Date(Date.now()+864e5));next=['fajr',tomorrow.fajr+24];}
+    if(!prev){const yesterday=computeTimes(new Date(Date.now()-864e5));prev=['isha',yesterday.isha-24];}
+    return{prev,next};
+  }
+  function prayerState(now,h){
+    const {prev,next}=bounds(h);
+    if(testPrayer!=='none'){const event=testPrayer==='lead'?next[0]:prev[0];return{signal:testPrayer,key:'test',event,elapsed:0,prev,next};}
+    const elapsed=(h-prev[1])*60,until=(next[1]-h)*60,prevDate=prev[1]<0?new Date(now.getTime()-864e5):now,key=eventKey(prevDate,prev[0]),ack=!!prefs.acknowledged[key],snoozedUntil=prefs.snoozed[key]||0;
+    if(!ack&&snoozedUntil>Date.now())return{signal:'snoozed',key,event:prev[0],elapsed,remaining:(snoozedUntil-Date.now())/60000,prev,next};
+    if(!ack&&elapsed>=0&&elapsed<=prefs.dueWindow)return{signal:'due',key,event:prev[0],elapsed,prev,next};

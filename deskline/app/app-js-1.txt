@@ -1,0 +1,99 @@
+(() => {
+  'use strict';
+
+  const LAT=43.62, LNG=-79.51;
+  const PRAYERS=[['fajr','Fajr','F'],['sunrise','Sunrise','S'],['dhuhr','Dhuhr','D'],['asr','Asr','A'],['maghrib','Maghrib','M'],['isha','Isha','I']];
+  const ALERTS=['fajr','dhuhr','asr','maghrib','isha'];
+  const APP_VERSION='9.0.0';
+  const STORAGE_KEY='desklinePrefsV8';
+  const DEFAULTS={
+    theme:'auto',privacy:true,timeFormat:'12',showSeconds:true,clarity:'discreet',edgeCue:true,taskbarBadge:true,
+    lead:10,dueWindow:18,snoozeMinutes:10,method:'15',asr:'hanafi',browserNotif:false,notificationDetail:'generic',
+    workReminders:true,showWorkline:true,workdaysOnly:true,workHours:'08:30-16:30',
+    waterTarget:24,sipCadence:30,waterSips:0,waterDate:'',waterGraceUntil:0,
+    noodleMinutes:30,noodleDurationAtStart:0,noodlePrealert:2,noodleStart:0,noodleDone:'',
+    offsets:{fajr:0,dhuhr:0,asr:0,maghrib:0,isha:0},acknowledged:{},snoozed:{}
+  };
+
+  const $=id=>document.getElementById(id);
+  const diagnostics=[];
+  function reportError(error,context='runtime'){
+    try{diagnostics.push({at:new Date().toISOString(),context,message:String(error&&error.message||error)});if(diagnostics.length>12)diagnostics.shift();console.error('[Deskline]',context,error);}catch(_){ }
+  }
+  window.addEventListener('error',e=>reportError(e.error||e.message,'window'));
+  window.addEventListener('unhandledrejection',e=>reportError(e.reason,'promise'));
+  const safeJSON=value=>{try{return JSON.parse(value||'null');}catch(error){reportError(error,'storage-parse');return null;}};
+  const storageGet=key=>{try{return localStorage.getItem(key);}catch(error){if(error&&error.name!=='SecurityError')reportError(error,'storage-read');return null;}};
+  const clamp=(value,min,max,fallback)=>{value=Number(value);return Number.isFinite(value)?Math.min(max,Math.max(min,value)):fallback;};
+  function normalizePrefs(raw={}){
+    const p={...DEFAULTS,...(raw||{})};
+    p.theme=['auto','desk','dark','paper'].includes(p.theme)?p.theme:'auto';
+    p.timeFormat=p.timeFormat==='24'?'24':'12';
+    p.clarity=p.clarity==='clear'?'clear':'discreet';
+    p.method=p.method==='18'?'18':'15';p.asr=p.asr==='std'?'std':'hanafi';
+    p.lead=clamp(p.lead,0,30,10);p.dueWindow=clamp(p.dueWindow,5,60,18);p.snoozeMinutes=clamp(p.snoozeMinutes,5,30,10);
+    p.waterTarget=[16,24,32].includes(Number(p.waterTarget))?Number(p.waterTarget):24;
+    p.sipCadence=[20,30,40].includes(Number(p.sipCadence))?Number(p.sipCadence):30;
+    p.noodleMinutes=[30,45,60].includes(Number(p.noodleMinutes))?Number(p.noodleMinutes):30;
+    p.noodlePrealert=[0,2,3,5].includes(Number(p.noodlePrealert))?Number(p.noodlePrealert):2;
+    p.waterSips=clamp(p.waterSips,0,50,0);p.waterGraceUntil=clamp(p.waterGraceUntil,0,Number.MAX_SAFE_INTEGER,0);
+    p.noodleStart=clamp(p.noodleStart,0,Number.MAX_SAFE_INTEGER,0);p.noodleDurationAtStart=clamp(p.noodleDurationAtStart,0,60,0);
+    p.workHours=/^\d{2}:\d{2}-\d{2}:\d{2}$/.test(String(p.workHours))?p.workHours:DEFAULTS.workHours;
+    ['privacy','showSeconds','edgeCue','taskbarBadge','browserNotif','workReminders','showWorkline','workdaysOnly'].forEach(k=>p[k]=Boolean(p[k]));
+    p.offsets={...DEFAULTS.offsets,...(p.offsets||{})};Object.keys(p.offsets).forEach(k=>p.offsets[k]=clamp(p.offsets[k],-15,15,0));
+    p.acknowledged=p.acknowledged&&typeof p.acknowledged==='object'?p.acknowledged:{};
+    p.snoozed=p.snoozed&&typeof p.snoozed==='object'?p.snoozed:{};
+    return p;
+  }
+  function loadPrefs(){
+    const current=safeJSON(storageGet(STORAGE_KEY));if(current)return normalizePrefs(current);
+    const v5=safeJSON(storageGet('desklinePrefsV5'));if(v5)return normalizePrefs({...v5,theme:v5.theme==='desk'?'auto':v5.theme});
+    const v4=safeJSON(storageGet('quietClockPrefsV4'));if(v4)return normalizePrefs({...v4,waterSips:Math.max(0,Math.round((v4.waterOz||0)/1.5)),sipCadence:30,noodleDurationAtStart:v4.noodleMinutes||30});
+    const old=safeJSON(storageGet('quietClockPrefsV3'));if(old){const hours={'8-17':'08:00-17:00','8-18':'08:00-18:00','9-17':'09:00-17:00'}[old.workHours]||DEFAULTS.workHours;return normalizePrefs({...old,workHours:hours,noodleMinutes:old.lunchMinutes||30,noodleDurationAtStart:old.lunchMinutes||30,noodleStart:old.lunchStart||0,noodleDone:old.lunchDone||''});}
+    return normalizePrefs();
+  }
+  let prefs=loadPrefs();
+
+  const dayKey=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const parseClock=s=>{const [h,m]=String(s).split(':').map(Number);return (h||0)+(m||0)/60;};
+  function workRange(){const [a,b]=prefs.workHours.split('-');return{start:parseClock(a),end:parseClock(b)};}
+  function displayClock(h){const H=Math.floor(h),m=Math.round((h-H)*60);return `${H%12||12}:${String(m).padStart(2,'0')} ${H>=12?'PM':'AM'}`;}
+  function isConfiguredWorkday(now){const day=now.getDay();return !prefs.workdaysOnly||(day>=1&&day<=5);}
+  const systemDark=window.matchMedia?window.matchMedia('(prefers-color-scheme: dark)'):null;
+  function resolvedTheme(now,h){
+    if(prefs.theme!=='auto')return prefs.theme;
+    const {start,end}=workRange(),sunrise=times&&Number.isFinite(times.sunrise)?times.sunrise:7,sunset=times&&Number.isFinite(times.sunset)?times.sunset:19;
+    if(h<sunrise-.35||h>sunset+.45)return 'dark';
+    if(h<start+.5||h>end-1.1)return 'paper';
+    if(systemDark&&systemDark.matches&&(h<start||h>end))return 'dark';
+    return 'desk';
+  }
+  function applyTheme(now,h){
+    const theme=resolvedTheme(now,h);document.body.dataset.theme=theme;
+    const colors={desk:'#eef2f6',paper:'#eeeae1',dark:'#0b1017'};
+    const meta=$('themeColor');if(meta)meta.setAttribute('content',colors[theme]||colors.desk);
+    return theme;
+  }
+  function ensureWorkday(now){
+    const key=dayKey(now);let changed=false;
+    if(prefs.waterDate!==key){prefs.waterDate=key;prefs.waterSips=0;prefs.waterGraceUntil=0;changed=true;}
+    if(prefs.noodleDone&&prefs.noodleDone!==key){prefs.noodleDone='';changed=true;}
+    if(prefs.noodleStart&&now.getTime()-prefs.noodleStart>12*3600e3){prefs.noodleStart=0;changed=true;}
+    if(changed)save();
+  }
+  function save(){
+    try{
+      const cutoff=Date.now()-4*864e5,cleanAck={},cleanSnooze={};
+      Object.entries(prefs.acknowledged||{}).forEach(([k,v])=>{if(v>cutoff)cleanAck[k]=v;});
+      Object.entries(prefs.snoozed||{}).forEach(([k,v])=>{if(v>cutoff)cleanSnooze[k]=v;});
+      prefs.acknowledged=cleanAck;prefs.snoozed=cleanSnooze;
+      const serialized=JSON.stringify(prefs);localStorage.setItem(STORAGE_KEY,serialized);localStorage.setItem('desklinePrefsV5',serialized);
+    }catch(_){ }
+  }
+  ensureWorkday(new Date());save();
+
+  const dtr=d=>d*Math.PI/180,rtd=r=>r*180/Math.PI;
+  const dsin=d=>Math.sin(dtr(d)),dcos=d=>Math.cos(dtr(d)),dtan=d=>Math.tan(dtr(d));
+  const dasin=x=>rtd(Math.asin(x)),dacos=x=>rtd(Math.acos(x)),datan2=(y,x)=>rtd(Math.atan2(y,x)),dacot=x=>rtd(Math.atan2(1,x));
+  const fixA=a=>{a%=360;return a<0?a+360:a;},fixH=a=>{a%=24;return a<0?a+24:a;};
+  function julian(y,m,d){if(m<=2){y--;m+=12;}const A=Math.floor(y/100),B=2-A+Math.floor(A/4);return Math.floor(365.25*(y+4716))+Math.floor(30.6001*(m+1))+d+B-1524.5;}

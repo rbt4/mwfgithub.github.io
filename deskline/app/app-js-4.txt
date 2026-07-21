@@ -1,0 +1,54 @@
+    const active=noodle.running||noodle.ready,visible=prefs.workReminders&&prefs.showWorkline&&(water.within||noodle.within||active||testRoutine==='water'||testRoutine==='showcase');
+    workline.classList.toggle('hidden',!visible);
+
+    waterBtn.className='ritual water';if(water.due)waterBtn.classList.add('due');if(water.complete)waterBtn.classList.add('ok');
+    const scaled=water.progress*segments;
+    $('waterMeter').innerHTML=Array.from({length:segments},(_,i)=>{const fill=Math.min(1,Math.max(0,scaled-i)),next=!water.complete&&i===Math.min(segments-1,Math.floor(scaled));return `<span class="water-seg${next?' next':''}" style="--fill:${fill.toFixed(3)}"></span>`;}).join('');
+    waterText.textContent=water.due?'Take 2–3 sips':water.complete?'Hydration pace met':`Sip ${water.sips} / ${water.total}`;
+    waterBtn.setAttribute('aria-label',water.complete?`Hydration pace met for the ${water.target}-ounce workday target`:`Take two to three sips, then click to log sip break ${Math.min(water.sips+1,water.total)} of ${water.total}`);
+
+    noodleBtn.className='ritual noodle';noodleBtn.classList.add(noodle.state==='done'?'ok':noodle.state);
+    $('noodleRing').style.setProperty('--timer-progress',noodle.progress.toFixed(4));
+    if(noodle.state==='running'||noodle.state==='pre')noodleText.textContent=mmss(noodle.remain);
+    else if(noodle.state==='ready')noodleText.textContent=noodle.age>10*60000?'Still waiting':'Go get it';
+    else if(noodle.state==='done')noodleText.textContent='Lunch done';
+    else noodleText.textContent=`Start ${prefs.noodleMinutes}m`;
+    noodleBtn.setAttribute('aria-label',noodle.state==='ready'?'Noodles ready, click after collecting them':noodle.running?`Noodle timer, ${mmss(noodle.remain)} remaining`:noodle.state==='done'?'Lunch complete':`Start ${prefs.noodleMinutes}-minute noodle timer; shift-click or right-click to change duration`);
+  }
+  function updateAmbient(h){const {start,end}=workRange(),phase=Math.min(1,Math.max(0,(h-start)/Math.max(1,end-start)));document.documentElement.style.setProperty('--ambient-x',`${(30+phase*42).toFixed(1)}%`);}
+
+  function renderCore(){
+    const now=new Date();ensureWorkday(now);const nowKey=dayKey(now);
+    if(nowKey!==calculatedDay){times=computeTimes(now);calculatedDay=nowKey;sent.clear();}
+    const h=now.getHours()+now.getMinutes()/60+now.getSeconds()/3600,H=now.getHours(),m=now.getMinutes(),s=now.getSeconds();updateAmbient(h);
+    if(prefs.timeFormat==='24'){$('hour').textContent=String(H).padStart(2,'0');$('ampm').textContent='';}else{$('hour').textContent=H%12||12;$('ampm').textContent=H>=12?'PM':'AM';}
+    $('minute').textContent=String(m).padStart(2,'0');$('seconds').textContent=String(s).padStart(2,'0');$('date').textContent=now.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});
+    document.title=prefs.timeFormat==='24'?`${String(H).padStart(2,'0')}:${String(m).padStart(2,'0')}`:`${H%12||12}:${String(m).padStart(2,'0')} ${H>=12?'PM':'AM'}`;
+
+    const prayer=prayerState(now,h),water=waterState(now,h),noodle=noodleState(now,h),attention=attentionFor(prayer,water,noodle),b={prev:prayer.prev,next:prayer.next};
+    document.body.dataset.signal=attention.signal;document.body.dataset.source=attention.source;document.body.dataset.prayerSignal=prayer.signal;applyTheme(now,h);document.body.dataset.clarity=prefs.clarity;document.body.dataset.edge=prefs.edgeCue?'on':'off';document.body.dataset.seconds=prefs.showSeconds?'on':'off';if(!prefs.privacy)document.body.classList.add('reveal');
+    $('favicon').href=iconData(attention.signal,attention.source);updateAppBadge(attention);
+
+    const nextMins=(b.next[1]-h)*60;
+    if(prayer.signal==='due'){$('statusWord').textContent='Now';$('eventTime').textContent=fmt(b.prev[1]);$('relativeTime').textContent=`${Math.floor(prayer.elapsed)}m`;$('eventName').textContent=nameOf(prayer.event);notifyOnce(prayer.key,prefs.notificationDetail==='named'?`${nameOf(prayer.event)} reminder`:'Clock reminder');}
+    else if(prayer.signal==='pending'){$('statusWord').textContent='Next';$('eventTime').textContent=fmt(b.next[1]);$('relativeTime').textContent=duration(nextMins);$('eventName').textContent=`${nameOf(prayer.event)} pending`;}
+    else if(prayer.signal==='snoozed'){$('statusWord').textContent='Snoozed';$('eventTime').textContent=fmt(b.prev[1]);$('relativeTime').textContent=`${Math.ceil(prayer.remaining)}m`;$('eventName').textContent=nameOf(prayer.event);}
+    else{$('statusWord').textContent=prayer.signal==='lead'?'Soon':'Next';$('eventTime').textContent=fmt(b.next[1]);$('relativeTime').textContent=duration(nextMins);$('eventName').textContent=nameOf(b.next[0]);}
+    $('progressFill').style.width=`${(Math.min(1,Math.max(0,(h-b.prev[1])/((b.next[1]-b.prev[1])||1)))*100).toFixed(2)}%`;
+    renderSequence(h,prayer);renderWorkline(now,h,water,noodle);
+    if(noodle.ready)notifyOnce(`${nowKey}:noodle:${prefs.noodleStart}`,'Timer finished');
+    if(panelOpen&&m!==lastRenderedMinute){buildPanel(h,prayer,water,noodle);lastRenderedMinute=m;}
+  }
+  function fallbackClock(){
+    try{const now=new Date(),H=now.getHours(),m=now.getMinutes();$('hour').textContent=prefs.timeFormat==='24'?String(H).padStart(2,'0'):H%12||12;$('minute').textContent=String(m).padStart(2,'0');$('ampm').textContent=prefs.timeFormat==='24'?'':H>=12?'PM':'AM';document.title=`${H%12||12}:${String(m).padStart(2,'0')} ${H>=12?'PM':'AM'}`;}catch(_){ }
+  }
+  function render(){try{renderCore();}catch(error){reportError(error,'render');fallbackClock();}}
+
+  function currentStates(){const now=new Date(),h=now.getHours()+now.getMinutes()/60+now.getSeconds()/3600,prayer=prayerState(now,h),water=waterState(now,h),noodle=noodleState(now,h);return{now,h,prayer,water,noodle,attention:attentionFor(prayer,water,noodle)};}
+  function acknowledgePrayer(){const {prayer}=currentStates();if(['due','pending','snoozed'].includes(prayer.signal)){if(prayer.key!=='test'){prefs.acknowledged[prayer.key]=Date.now();delete prefs.snoozed[prayer.key];save();}testPrayer='none';toast('Acknowledged');render();return true;}if(testPrayer!=='none'){testPrayer='none';render();return true;}return false;}
+  function snoozePrayer(){const {prayer}=currentStates();if(['due','pending','snoozed'].includes(prayer.signal)){if(prayer.key!=='test'){prefs.snoozed[prayer.key]=Date.now()+prefs.snoozeMinutes*60000;save();}testPrayer='none';toast(`Remind again in ${prefs.snoozeMinutes} min`);render();return true;}return false;}
+  function clearSignalTest(){testPrayer='none';testRoutine='none';clearTimeout(testTimer);render();}
+  function runSignalTest(kind){clearTimeout(testTimer);testPrayer=kind==='prayer'?'due':'none';testRoutine=kind==='water'?'water':kind==='noodle'?'noodle':'none';toast('Temporary signal check · no records changed');testTimer=setTimeout(()=>{testPrayer='none';testRoutine='none';clearTimeout(testTimer);render();},8000);render();}
+  function logWater(delta=1){
+    if(testRoutine==='water'){clearSignalTest();toast('Sip signal check cleared · nothing logged');return;}
+    ensureWorkday(new Date());const plan=hydrationPlan();prefs.waterSips=Math.max(0,Math.min(plan.total,(prefs.waterSips||0)+delta));prefs.waterGraceUntil=Date.now()+12*60000;save();

@@ -1,0 +1,61 @@
+      <div class="plan-card">${(()=>{const p=hydrationPlan();const amount=p.amount.toFixed(p.amount%1?1:0);return `<strong>${p.total} quiet sip breaks</strong> across the workday · about <strong>${amount} oz</strong> each (${p.cadence===20?'roughly 2 small sips':p.cadence===30?'roughly 2–3 sips':'roughly 3–4 sips'}) · totals ${prefs.waterTarget} oz`;})()}</div>
+      ${choices('Noodle timer','noodleSet',[[30,'30m'],[45,'45m'],[60,'60m']],prefs.noodleMinutes)}
+      ${setting('Timer early cue','noodlePre',prefs.noodlePrealert?`${prefs.noodlePrealert} min`:'Off')}
+      <div class="section-title">Signal check</div>
+      <div class="signal-note">Temporary eight-second tests. They do not change records. When installed, the taskbar badge uses 1 for schedule, 2 for pace, and 3 for the timer.</div>
+      <div class="actions"><button class="action ${testPrayer!=='none'?'active':''}" data-action="testPrayer" type="button">Show prayer signal</button><button class="action ${testRoutine==='water'?'active':''}" data-action="testWater" type="button">Show sip signal</button><button class="action ${testRoutine==='noodle'?'active':''}" data-action="testNoodle" type="button">Show timer-finished signal</button><button class="action" data-action="logSip" type="button">Log one sip break</button><button class="action wide" data-action="clearTest" type="button">Clear signal test</button><button class="action wide" data-action="resetToday" type="button">Reset today’s workday records</button></div>
+      <div class="meta"><span>${hijri(new Date())}</span><span>Qibla ≈ ${Math.round(QIBLA)}° ${qdir}</span></div>
+      <div class="version-note">Deskline ${APP_VERSION} · ${diagnostics.length?'recovered from '+diagnostics.length+' issue'+(diagnostics.length===1?'':'s'):'system healthy'}</div>
+      <div class="hint"><kbd>R</kbd> reveal · <kbd>W</kbd> sip logged · <kbd>N</kbd> start timer · <kbd>Shift+N</kbd> choose/cancel · <kbd>Enter</kbd> acknowledge · <kbd>S</kbd> snooze · <kbd>H</kbd> cover</div>`;
+  }
+  function togglePanel(force){panelOpen=typeof force==='boolean'?force:!panelOpen;if(panelOpen){const st=currentStates();buildPanel(st.h,st.prayer,st.water,st.noodle);lastRenderedMinute=new Date().getMinutes();}$('panel').classList.toggle('on',panelOpen);}
+  $('corner').addEventListener('click',e=>{e.stopPropagation();togglePanel();});
+  $('panel').addEventListener('click',async e=>{
+    e.stopPropagation();const offsetButton=e.target.closest('[data-offset]');if(offsetButton){const k=offsetButton.dataset.offset,delta=Number(offsetButton.dataset.delta);prefs.offsets[k]=Math.max(-15,Math.min(15,(prefs.offsets[k]||0)+delta));times=computeTimes(new Date());save();render();const st=currentStates();buildPanel(st.h,st.prayer,st.water,st.noodle);return;}
+    const button=e.target.closest('[data-action]');if(!button)return;const a=button.dataset.action;
+    if(a==='close'){togglePanel(false);return;}
+    if(a==='themeSet')prefs.theme=['auto','desk','paper','dark'].includes(button.dataset.value)?button.dataset.value:'auto';
+    else if(a==='format')prefs.timeFormat=prefs.timeFormat==='12'?'24':'12';
+    else if(a==='seconds')prefs.showSeconds=!prefs.showSeconds;
+    else if(a==='privacy'){prefs.privacy=!prefs.privacy;document.body.classList.toggle('reveal',!prefs.privacy);}
+    else if(a==='cover')document.body.classList.toggle('cover');
+    else if(a==='clarity')prefs.clarity=prefs.clarity==='discreet'?'clear':'discreet';
+    else if(a==='edge')prefs.edgeCue=!prefs.edgeCue;
+    else if(a==='lead')prefs.lead={5:10,10:15,15:20,20:5}[prefs.lead]||10;
+    else if(a==='dueWindow')prefs.dueWindow={10:18,18:25,25:35,35:10}[prefs.dueWindow]||18;
+    else if(a==='snooze')prefs.snoozeMinutes={5:10,10:15,15:20,20:5}[prefs.snoozeMinutes]||10;
+    else if(a==='asr'){prefs.asr=prefs.asr==='hanafi'?'std':'hanafi';times=computeTimes(new Date());}
+    else if(a==='method'){prefs.method=prefs.method==='18'?'15':'18';times=computeTimes(new Date());}
+    else if(a==='taskbarBadge'){prefs.taskbarBadge=!prefs.taskbarBadge;lastBadge='';}
+    else if(a==='installApp'){await installDeskline();}
+    else if(a==='work')prefs.workReminders=!prefs.workReminders;
+    else if(a==='workdays')prefs.workdaysOnly=!prefs.workdaysOnly;
+    else if(a==='workline')prefs.showWorkline=!prefs.showWorkline;
+    else if(a==='workHours')prefs.workHours={'08:00-16:00':'08:30-16:30','08:30-16:30':'09:00-17:00','09:00-17:00':'08:00-17:00','08:00-17:00':'08:00-18:00','08:00-18:00':'08:00-16:00'}[prefs.workHours]||'08:30-16:30';
+    else if(a==='waterTarget'){prefs.waterTarget={16:24,24:32,32:16}[prefs.waterTarget]||24;prefs.waterSips=Math.min(prefs.waterSips,hydrationPlan().total);}
+    else if(a==='sipCadence'){prefs.sipCadence=Number(button.dataset.value)||30;prefs.waterSips=Math.min(prefs.waterSips,hydrationPlan().total);}
+    else if(a==='noodleSet')prefs.noodleMinutes=Number(button.dataset.value)||30;
+    else if(a==='noodlePre')prefs.noodlePrealert={0:2,2:3,3:5,5:0}[prefs.noodlePrealert]??2;
+    else if(a==='notify'){if('Notification'in window){try{const result=await Notification.requestPermission();prefs.browserNotif=result==='granted';toast(result==='granted'?'System notifications enabled':'Permission not granted');}catch(_){toast('Notifications unavailable here');}}else toast('Notifications unavailable here');}
+    else if(a==='notifyDetail')prefs.notificationDetail=prefs.notificationDetail==='generic'?'named':'generic';
+    else if(a==='testPrayer'){runSignalTest('prayer');}
+    else if(a==='testWater'){runSignalTest('water');}
+    else if(a==='testNoodle'){runSignalTest('noodle');}
+    else if(a==='logSip'){logWater(1);}
+    else if(a==='clearTest'){clearSignalTest();toast('Signal test cleared');}
+    else if(a==='resetToday'){prefs.waterDate=dayKey(new Date());prefs.waterSips=0;prefs.waterGraceUntil=0;prefs.noodleStart=0;prefs.noodleDurationAtStart=0;prefs.noodleDone='';testPrayer='none';testRoutine='none';toast('Today’s workday records reset');}
+    save();render();const st=currentStates();buildPanel(st.h,st.prayer,st.water,st.noodle);
+  });
+
+  document.addEventListener('click',()=>{if(panelOpen)togglePanel(false);});
+  document.addEventListener('keydown',e=>{
+    if(e.key==='r'||e.key==='R')revealFor();
+    else if(e.key==='w'||e.key==='W'){logWater(e.shiftKey?-1:1);e.preventDefault();}
+    else if(e.key==='n'||e.key==='N'){noodleAction(e.shiftKey);e.preventDefault();}
+    else if(e.key==='Enter'){if(primaryAcknowledge())e.preventDefault();}
+    else if(e.key==='s'||e.key==='S'){if(smartSnooze())e.preventDefault();}
+    else if(e.key==='h'||e.key==='H'){document.body.classList.toggle('cover');toast(document.body.classList.contains('cover')?'Cover on':'Cover off');}
+    else if(e.key===',')togglePanel();
+    else if(e.key==='Escape'){togglePanel(false);document.body.classList.remove('reveal');testPrayer='none';testRoutine='none';clearTimeout(testTimer);render();}
+  });
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden){times=computeTimes(new Date());render();}});window.addEventListener('focus',render);window.addEventListener('pageshow',render);window.addEventListener('online',render);if(systemDark)systemDark.addEventListener?.('change',render);

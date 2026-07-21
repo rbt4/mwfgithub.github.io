@@ -1,0 +1,87 @@
+    if(until>0&&until<=prefs.lead)return{signal:'lead',key:eventKey(now,next[0]),event:next[0],elapsed:-until,prev,next};
+    if(!ack&&elapsed>prefs.dueWindow)return{signal:'pending',key,event:prev[0],elapsed,prev,next};
+    return{signal:'none',key,event:next[0],elapsed:-until,prev,next};
+  }
+
+  function hydrationPlan(){
+    const {start,end}=workRange(),durationMinutes=Math.max(60,(end-start)*60),cadence=prefs.sipCadence;
+    const total=Math.max(1,Math.round(durationMinutes/cadence)),amount=prefs.waterTarget/total,firstOffset=cadence/2;
+    return{start,end,durationMinutes,cadence,total,amount,firstOffset};
+  }
+  function waterState(now,h){
+    const plan=hydrationPlan(),within=isConfiguredWorkday(now)&&h>=plan.start&&h<plan.end,elapsed=(h-plan.start)*60;
+    const expected=Math.min(plan.total,Math.max(0,Math.floor((elapsed-plan.firstOffset)/plan.cadence)+1));
+    const sips=testRoutine==='showcase'?Math.round(plan.total*.48):Math.min(plan.total,prefs.waterSips||0);
+    const complete=sips>=plan.total,due=prefs.workReminders&&within&&!complete&&sips<expected&&Date.now()>=prefs.waterGraceUntil||testRoutine==='water';
+    const nextIndex=Math.min(plan.total-1,sips),nextAt=plan.start+((plan.firstOffset+nextIndex*plan.cadence)/60);
+    return{within,complete,due,expected,sips,total:plan.total,amount:plan.amount,target:prefs.waterTarget,progress:sips/plan.total,nextAt,cadence:plan.cadence};
+  }
+  function noodleState(now,h){
+    const {start,end}=workRange(),within=isConfiguredWorkday(now)&&h>=start&&h<end,total=(prefs.noodleDurationAtStart||prefs.noodleMinutes)*60000;
+    if(testRoutine==='noodle')return{state:'ready',ready:true,running:false,pre:false,remain:0,progress:1,within,age:4*60000};
+    if(testRoutine==='showcase')return{state:'running',ready:false,running:true,pre:false,remain:18*60000+42*1000,progress:.38,within,age:0};
+    if(prefs.noodleStart){const elapsed=now.getTime()-prefs.noodleStart,remain=total-elapsed;if(remain>0)return{state:remain<=prefs.noodlePrealert*60000?'pre':'running',ready:false,running:true,pre:remain<=prefs.noodlePrealert*60000,remain,progress:Math.min(1,Math.max(0,elapsed/total)),within,age:0};return{state:'ready',ready:true,running:false,pre:false,remain:0,progress:1,within,age:-remain};}
+    if(prefs.noodleDone===dayKey(now))return{state:'done',ready:false,running:false,pre:false,remain:0,progress:1,within,age:0};
+    return{state:'idle',ready:false,running:false,pre:false,remain:0,progress:0,within,age:0};
+  }
+  function attentionFor(prayer,water,noodle){
+    if(prayer.signal==='due')return{signal:'due',source:'prayer'};
+    if(noodle.ready)return{signal:'due',source:'noodle'};
+    if(prayer.signal==='pending')return{signal:'pending',source:'prayer'};
+    if(noodle.pre)return{signal:'lead',source:'noodle'};
+    if(water.due)return{signal:'due',source:'water'};
+    if(prayer.signal==='snoozed')return{signal:'snoozed',source:'prayer'};
+    if(prayer.signal==='lead')return{signal:'lead',source:'prayer'};
+    return{signal:'none',source:'none'};
+  }
+
+  function iconData(signal,source){
+    const active=signal!=='none';
+    const state={
+      none:{scale:1,halo:0,fill:.96,stroke:0,shine:0},
+      lead:{scale:.86,halo:.12,fill:.12,stroke:1.5,shine:.16},
+      snoozed:{scale:.82,halo:.08,fill:.10,stroke:1.4,shine:.12},
+      pending:{scale:.98,halo:.18,fill:.62,stroke:.9,shine:.2},
+      due:{scale:1.1,halo:.34,fill:1,stroke:0,shine:.28}
+    }[signal]||{scale:1,halo:.18,fill:1,stroke:0,shine:.18};
+
+    const spec={
+      prayer:{x:24.7,y:7.3,size:3.55,fill:'#b78552',glow:'#efbc7f',shape:'diamond'},
+      water:{x:24.8,y:24.7,size:3.35,fill:'#72aede',glow:'#9ed0ff',shape:'dot'},
+      noodle:{x:7.3,y:7.3,size:3.35,fill:'#ca9158',glow:'#efb47d',shape:'square'},
+      none:{x:24.7,y:7.3,size:0,fill:'#7b8796',glow:'#a8b3bf',shape:'dot'}
+    }[source]||{x:24.8,y:7.3,size:3.3,fill:'#7b8796',glow:'#a8b3bf',shape:'dot'};
+
+    const baseStroke='#788595';
+    const halo=active ? `<circle cx="${spec.x}" cy="${spec.y}" r="${(spec.size*state.scale+2.5).toFixed(2)}" fill="${spec.glow}" fill-opacity="${state.halo.toFixed(2)}"/>` : '';
+
+    function premiumShape(shape){
+      const size=spec.size*state.scale, x=spec.x, y=spec.y, fill=spec.fill;
+      const common=`fill="${fill}" fill-opacity="${state.fill.toFixed(2)}"`;
+      const stroke=state.stroke?`stroke="${fill}" stroke-width="${state.stroke.toFixed(2)}"`:'';
+      const shineAlpha=state.shine.toFixed(2);
+      if(shape==='dot'){
+        return `${halo}<circle cx="${x}" cy="${y}" r="${size.toFixed(2)}" ${common} ${stroke}/><circle cx="${(x-.8).toFixed(2)}" cy="${(y-.95).toFixed(2)}" r="${(size*.42).toFixed(2)}" fill="#ffffff" fill-opacity="${shineAlpha}"/>`;
+      }
+      if(shape==='square'){
+        const side=(size*2).toFixed(2), left=(x-size).toFixed(2), top=(y-size).toFixed(2), radius=(size*.5).toFixed(2);
+        return `${halo}<rect x="${left}" y="${top}" width="${side}" height="${side}" rx="${radius}" ry="${radius}" ${common} ${stroke}/><rect x="${(x-size*.55).toFixed(2)}" y="${(y-size*.62).toFixed(2)}" width="${(size*.8).toFixed(2)}" height="${(size*.45).toFixed(2)}" rx="${(size*.24).toFixed(2)}" fill="#ffffff" fill-opacity="${shineAlpha}"/>`;
+      }
+      const pts=`${x},${(y-size).toFixed(2)} ${(x+size).toFixed(2)},${y} ${x},${(y+size).toFixed(2)} ${(x-size).toFixed(2)},${y}`;
+      const pts2=`${x},${(y-size*.42).toFixed(2)} ${(x+size*.42).toFixed(2)},${y} ${x},${(y+size*.42).toFixed(2)} ${(x-size*.42).toFixed(2)},${y}`;
+      return `${halo}<polygon points="${pts}" ${common} ${stroke} stroke-linejoin="round"/><polygon points="${pts2}" fill="#ffffff" fill-opacity="${shineAlpha}"/>`;
+    }
+
+    const badge=active?premiumShape(spec.shape):'';
+    const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10.5" fill="none" stroke="${baseStroke}" stroke-width="2"/><path d="M16 9.5v6.7l4.2 2.7" fill="none" stroke="${baseStroke}" stroke-width="2" stroke-linecap="round"/>${badge}</svg>`;
+    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  }
+  function notifyOnce(key,text){if(!prefs.browserNotif||sent.has(key)||!('Notification'in window))return;try{if(Notification.permission==='granted'){new Notification(text,{silent:true,tag:key});sent.add(key);}}catch(_){ }}
+  function toast(text){clearTimeout(toastTimer);$('toast').textContent=text;$('toast').classList.add('on');toastTimer=setTimeout(()=>$('toast').classList.remove('on'),1900);}
+  function revealFor(ms=6500){clearTimeout(revealTimer);document.body.classList.add('reveal');revealTimer=setTimeout(()=>{if(prefs.privacy)document.body.classList.remove('reveal');},ms);}
+
+  function renderSequence(h,state){
+    $('sequence').innerHTML=ALERTS.map(k=>{const classes=['sequence-mark'];if(times[k]<h)classes.push('passed');if(state.event===k&&state.signal==='due')classes.push('due');else if(state.event===k&&state.signal==='pending')classes.push('pending');else if(state.next&&state.next[0]===k)classes.push('next');const code=(PRAYERS.find(p=>p[0]===k)||[])[2]||'';return `<span class="${classes.join(' ')}" data-code="${code}" aria-label="${nameOf(k)}"></span>`;}).join('');
+  }
+  function renderWorkline(now,h,water,noodle){
+    const workline=$('workline'),waterBtn=$('waterBtn'),noodleBtn=$('noodleBtn'),waterText=$('waterText'),noodleText=$('noodleText'),segments=8;

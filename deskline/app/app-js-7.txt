@@ -1,0 +1,12 @@
+  window.addEventListener('storage',e=>{if(e.key===STORAGE_KEY||e.key==='desklinePrefsV5'){try{prefs=normalizePrefs(safeJSON(e.newValue)||{});times=computeTimes(new Date());lastBadge='';render();}catch(error){reportError(error,'storage-sync');}}});
+
+  document.body.classList.toggle('reveal',!prefs.privacy);
+  const preview=new URLSearchParams(location.search).get('preview');
+  if(preview==='prayer'||preview==='due')testPrayer='due';
+  else if(preview==='water')testRoutine='water';
+  else if(preview==='noodle')testRoutine='noodle';
+  else if(preview==='showcase'){testRoutine='showcase';document.body.classList.add('reveal');}
+  function scheduleTick(){render();const delay=Math.max(120,1015-(Date.now()%1000));setTimeout(scheduleTick,delay);}
+  registerDesklineWorker();scheduleTick();
+  window.desklinePreview=mode=>{testPrayer=mode==='prayer'?'due':'none';testRoutine=['water','noodle','showcase'].includes(mode)?mode:'none';if(mode==='showcase')document.body.classList.add('reveal');render();};
+})();
