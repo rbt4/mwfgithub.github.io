@@ -1,9 +1,6 @@
 name: Build SnowCode APK
 
 on:
-  push:
-    branches:
-      - snowcode-apk-build
   workflow_dispatch:
 
 jobs:
