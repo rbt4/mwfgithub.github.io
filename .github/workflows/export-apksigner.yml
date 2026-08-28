@@ -1,0 +1,34 @@
+name: Export Android signing tools
+
+on:
+  push:
+    branches:
+      - snowcode-apk-build
+  workflow_dispatch:
+
+jobs:
+  export-tools:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install build tools
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "build-tools;35.0.0"
+      - name: Bundle signing tools
+        shell: bash
+        run: |
+          mkdir -p /tmp/android-sign-tools
+          cp -a "$ANDROID_HOME/build-tools/35.0.0/apksigner" /tmp/android-sign-tools/
+          cp -a "$ANDROID_HOME/build-tools/35.0.0/zipalign" /tmp/android-sign-tools/
+          cp -a "$ANDROID_HOME/build-tools/35.0.0/lib" /tmp/android-sign-tools/
+      - name: Upload signing tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-sign-tools-35
+          path: /tmp/android-sign-tools
+          if-no-files-found: error
