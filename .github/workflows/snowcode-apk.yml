@@ -44,7 +44,7 @@ jobs:
           cat snowcode-v05/part* > /tmp/snowcode-v05.b64
           base64 -d /tmp/snowcode-v05.b64 > /tmp/snowcode-v05.zip
           unzip -oq /tmp/snowcode-v05.zip -d SnowCodeAndroid
-          grep -q 'versionName "0.5.0"' SnowCodeAndroid/app/build.gradle
+          grep -q "versionName '0.5.0'" SnowCodeAndroid/app/build.gradle
 
       - name: Ensure Android SDK 35
         shell: bash
