@@ -34,6 +34,7 @@ jobs:
       - name: Rebuild Android source archive
         shell: bash
         run: |
+          # v0.4 uses a split base64 source payload so this branch is self-contained.
           if [ -d snowcode-apk-v04 ]; then
             cat snowcode-apk-v04/v04.part00 snowcode-apk-v04/v04.part01 snowcode-apk-v04/v04.part02 snowcode-apk-v04/v04.part03 snowcode-apk-v04/v04.part04a snowcode-apk-v04/v04.part04b snowcode-apk-v04/v04.part05a snowcode-apk-v04/v04.part05b snowcode-apk-v04/v04.part06a snowcode-apk-v04/v04.part06b > /tmp/snowcode.b64
           else
