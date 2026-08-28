@@ -38,7 +38,7 @@ jobs:
           unzip -q /tmp/SnowCodeAndroid-src.zip
           test -f SnowCodeAndroid/app/src/main/AndroidManifest.xml
 
-      - name: Apply SnowCode v0.5 UI
+      - name: Apply SnowCode v0.5 UI base
         shell: bash
         run: |
           cat snowcode-v05/part* > /tmp/snowcode-v05.b64
@@ -46,19 +46,30 @@ jobs:
           unzip -oq /tmp/snowcode-v05.zip -d SnowCodeAndroid
           grep -q "versionName '0.5.0'" SnowCodeAndroid/app/build.gradle
 
+      - name: Apply SnowCode v0.7 stability and game update
+        shell: bash
+        run: |
+          cat snowcode-v07-patch/part0* > /tmp/v07.patch.gz.b64
+          base64 -d /tmp/v07.patch.gz.b64 > /tmp/v07.patch.gz
+          gzip -dc /tmp/v07.patch.gz > /tmp/v07.patch
+          cd SnowCodeAndroid
+          patch -p2 < /tmp/v07.patch
+          grep -q "versionName '0.7.0'" app/build.gradle
+          grep -q "android-native-v07" app/src/main/java/com/snowcode/kano/MainActivity.java
+
       - name: Ensure Android SDK 35
         shell: bash
         run: |
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Build debug APK
+      - name: Build APK
         working-directory: SnowCodeAndroid
         run: gradle --no-daemon :app:assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SnowCode-0.5.0-APK
+          name: SnowCode-0.7.0-APK
           path: SnowCodeAndroid/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
