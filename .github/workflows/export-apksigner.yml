@@ -26,9 +26,10 @@ jobs:
           cp -a "$ANDROID_HOME/build-tools/35.0.0/apksigner" /tmp/android-sign-tools/
           cp -a "$ANDROID_HOME/build-tools/35.0.0/zipalign" /tmp/android-sign-tools/
           cp -a "$ANDROID_HOME/build-tools/35.0.0/lib" /tmp/android-sign-tools/
+          cp -a "$ANDROID_HOME/build-tools/35.0.0/lib64" /tmp/android-sign-tools/ || true
       - name: Upload signing tools
         uses: actions/upload-artifact@v4
         with:
-          name: android-sign-tools-35
+          name: android-sign-tools-35-complete
           path: /tmp/android-sign-tools
           if-no-files-found: error
